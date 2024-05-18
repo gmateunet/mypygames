@@ -150,7 +150,7 @@ class Pacman:
 class Ghost:
     def __init__(self, maze):
         self.maze = maze
-        self.pos = [10 * TILE_SIZE + PADDING, 10 * TILE_SIZE + HEADER_HEIGHT + PADDING]
+        self.pos = [9 * TILE_SIZE + PADDING, 9 * TILE_SIZE + HEADER_HEIGHT + PADDING]
         self.speed = 2
         self.dir = random.choice([[1, 0], [-1, 0], [0, 1], [0, -1]])
         self.image = pygame.image.load("ghost.png")
@@ -173,13 +173,31 @@ class Ghost:
         return True
 
     def move(self):
-        # Intentar moverse en la dirección actual
+        # Detectar bifurcaciones y cambiar de dirección
+        possible_directions = []
+        if self.can_move([self.pos[0] + self.speed, self.pos[1]]):  # Derecha
+            possible_directions.append([1, 0])
+        if self.can_move([self.pos[0] - self.speed, self.pos[1]]):  # Izquierda
+            possible_directions.append([-1, 0])
+        if self.can_move([self.pos[0], self.pos[1] + self.speed]):  # Abajo
+            possible_directions.append([0, 1])
+        if self.can_move([self.pos[0], self.pos[1] - self.speed]):  # Arriba
+            possible_directions.append([0, -1])
+
+        # Si hay más de una dirección posible, eliminar la dirección opuesta actual
+        if len(possible_directions) > 1:
+            opposite_dir = [-self.dir[0], -self.dir[1]]
+            if opposite_dir in possible_directions:
+                possible_directions.remove(opposite_dir)
+        
+        # Cambiar de dirección si hay opciones disponibles
+        if possible_directions:
+            self.dir = random.choice(possible_directions)
+
+        # Mover en la dirección actual
         new_pos = [self.pos[0] + self.dir[0] * self.speed, self.pos[1] + self.dir[1] * self.speed]
         if self.can_move(new_pos):
             self.pos = new_pos
-        else:
-            # Cambiar de dirección aleatoriamente si no puede moverse
-            self.dir = random.choice([[1, 0], [-1, 0], [0, 1], [0, -1]])
 
 class Game:
     def __init__(self):
