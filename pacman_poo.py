@@ -20,9 +20,32 @@ class Header:
         message_text = self.font.render(self.message, True, WHITE)
         screen.blit(message_text, (SCREEN_WIDTH // 2, 10))
 
+class Banner:
+    def __init__(self, message, with_options=False):
+        self.font = pygame.font.SysFont(None, 72)
+        self.message = message
+        self.with_options = with_options
+        self.option_font = pygame.font.SysFont(None, 36)
+
+    def draw(self, screen):
+        banner_width = SCREEN_WIDTH // 2
+        banner_height = SCREEN_HEIGHT // 4
+        banner_x = (SCREEN_WIDTH - banner_width) // 2
+        banner_y = (SCREEN_HEIGHT - banner_height) // 2
+
+        pygame.draw.rect(screen, BLACK, (banner_x, banner_y, banner_width, banner_height), border_radius=20)
+        pygame.draw.rect(screen, WHITE, (banner_x, banner_y, banner_width, banner_height), 5, border_radius=20)
+        text = self.font.render(self.message, True, YELLOW)
+        screen.blit(text, (banner_x + 20, banner_y + 20))
+
+        if self.with_options:
+            options_text = self.option_font.render("N: Nueva partida | S: Salir", True, WHITE)
+            screen.blit(options_text, (banner_x + 20, banner_y + banner_height - 50))
+
 class Pacman:
-    def __init__(self, maze, eat_sound):
+    def __init__(self, maze, header, eat_sound):
         self.maze = maze
+        self.header = header
         self.pos = self.get_random_position()
         self.speed = 4
         self.dir = [0, 0]
@@ -30,6 +53,7 @@ class Pacman:
         self.eat_sound = eat_sound
         self.image = pygame.image.load("pacman.png")
         self.image = pygame.transform.scale(self.image, (TILE_SIZE, TILE_SIZE))
+        self.pills_eaten = 0  # Contador de píldoras comidas
 
     def get_random_position(self):
         col, row = self.maze.get_random_valid_position()
@@ -61,7 +85,9 @@ class Pacman:
             (new_pos[0] + TILE_SIZE - 1, new_pos[1] + TILE_SIZE - 1)
         ]
         for (x, y) in corners:
-            if x < PADDING or x >= WIDTH + PADDING or y < HEADER_HEIGHT + PADDING or y >= HEIGHT + HEADER_HEIGHT + PADDING or self.maze.is_wall((x - PADDING) // TILE_SIZE, (y - HEADER_HEIGHT - PADDING) // TILE_SIZE):
+            if x < PADDING or x >= SCREEN_WIDTH - PADDING or y < HEADER_HEIGHT + PADDING or y >= SCREEN_HEIGHT - PADDING:
+                return False
+            if self.maze.is_wall((x - PADDING) // TILE_SIZE, (y - HEADER_HEIGHT - PADDING) // TILE_SIZE):
                 return False
         return True
 
@@ -78,6 +104,8 @@ class Pacman:
             # Comer la píldora si está en una
             if self.maze.eat_pill((self.pos[0] - PADDING) // TILE_SIZE, (self.pos[1] - HEADER_HEIGHT - PADDING) // TILE_SIZE):
                 self.eat_sound.play()
+                self.pills_eaten += 1
+                self.header.eat_pill()  # Actualizar el header
                 return True
         else:
             # Alinear a la cuadrícula si se choca con una pared
@@ -104,11 +132,8 @@ class Ghost:
             col, row = self.maze.get_random_valid_position()
             x = col * TILE_SIZE + PADDING
             y = row * TILE_SIZE + HEADER_HEIGHT + PADDING
-            if (x, y) != (pacman_pos[0], pacman_pos[1]):
+            if (x, y) != pacman_pos:
                 return [x, y]
-
-    def draw(self, screen):
-        screen.blit(self.image, (self.pos[0], self.pos[1]))
 
     def can_move(self, new_pos):
         # Verificar las cuatro esquinas del sprite del fantasma
@@ -119,179 +144,77 @@ class Ghost:
             (new_pos[0] + TILE_SIZE - 1, new_pos[1] + TILE_SIZE - 1)
         ]
         for (x, y) in corners:
-            if x < PADDING or x >= WIDTH + PADDING or y < HEADER_HEIGHT + PADDING or y >= HEIGHT + HEADER_HEIGHT + PADDING or self.maze.is_wall((x - PADDING) // TILE_SIZE, (y - HEADER_HEIGHT - PADDING) // TILE_SIZE):
+            if x < PADDING or x >= SCREEN_WIDTH - PADDING or y < HEADER_HEIGHT + PADDING or y >= SCREEN_HEIGHT - PADDING:
+                return False
+            if self.maze.is_wall((x - PADDING) // TILE_SIZE, (y - HEADER_HEIGHT - PADDING) // TILE_SIZE):
                 return False
         return True
 
     def move(self):
-        # Detectar bifurcaciones y cambiar de dirección
-        possible_directions = []
-        if self.can_move([self.pos[0] + self.speed, self.pos[1]]):  # Derecha
-            possible_directions.append([1, 0])
-        if self.can_move([self.pos[0] - self.speed, self.pos[1]]):  # Izquierda
-            possible_directions.append([-1, 0])
-        if self.can_move([self.pos[0], self.pos[1] + self.speed]):  # Abajo
-            possible_directions.append([0, 1])
-        if self.can_move([self.pos[0], self.pos[1] - self.speed]):  # Arriba
-            possible_directions.append([0, -1])
-
-        # Si hay más de una dirección posible, eliminar la dirección opuesta actual
-        if len(possible_directions) > 1:
-            opposite_dir = [-self.dir[0], -self.dir[1]]
-            if opposite_dir in possible_directions:
-                possible_directions.remove(opposite_dir)
-        
-        # Cambiar de dirección si hay opciones disponibles
-        if possible_directions:
-            self.dir = random.choice(possible_directions)
-
-        # Mover en la dirección actual
         new_pos = [self.pos[0] + self.dir[0] * self.speed, self.pos[1] + self.dir[1] * self.speed]
-        if self.can_move(new_pos):
+        if not self.can_move(new_pos):
+            self.dir = random.choice([[1, 0], [-1, 0], [0, 1], [0, -1]])
+        else:
             self.pos = new_pos
 
-class Banner:
-    def __init__(self, text, duration=None):
-        self.text = text
-        self.duration = duration  # Duración en milisegundos
-        self.font = pygame.font.SysFont(None, 72)
-        self.start_time = None
+    def draw(self, screen):
+        screen.blit(self.image, (self.pos[0], self.pos[1]))
 
-    def draw_rounded_rect(self, screen, rect, color, corner_radius):
-        # Dibujar un rectángulo con bordes redondeados
-        pygame.draw.rect(screen, color, rect, border_radius=corner_radius)
+def main():
+    pygame.init()
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    clock = pygame.time.Clock()
+    maze = Maze()
+    header = Header(maze.total_pills)
+    eat_sound = pygame.mixer.Sound("chomp.wav")
+    pacman = Pacman(maze, header, eat_sound)
+    ghosts = [Ghost(maze, pacman.pos)]  # Lista de fantasmas inicial
+    banner = None
 
-    def show(self, screen):
-        text_surface = self.font.render(self.text, True, YELLOW)
-        text_rect = text_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50))
-        
-        # Crear un fondo con bordes redondeados para el banner
-        banner_rect = text_rect.inflate(40, 40)
-        self.draw_rounded_rect(screen, banner_rect, BANNER_BACKGROUND, 20)
-        pygame.draw.rect(screen, BANNER_BORDER_COLOR, banner_rect, 2, border_radius=20)
-        
-        # Dibujar el texto en el centro del banner
-        screen.blit(text_surface, text_rect)
-        pygame.display.flip()
-
-    def start(self):
-        self.start_time = pygame.time.get_ticks()
-
-    def has_finished(self):
-        if self.duration:
-            return pygame.time.get_ticks() - self.start_time >= self.duration if self.start_time else False
-        return False
-
-class OptionBanner(Banner):
-    def __init__(self, text, options):
-        super().__init__(text)
-        self.options = options
-        self.small_font = pygame.font.SysFont(None, 36)
-
-    def show(self, screen):
-        text_surface = self.font.render(self.text, True, YELLOW)
-        text_rect = text_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 30))
-        
-        # Crear un fondo con bordes redondeados para el banner
-        banner_rect = text_rect.inflate(60, 100)
-        self.draw_rounded_rect(screen, banner_rect, BANNER_BACKGROUND, 20)
-        pygame.draw.rect(screen, BANNER_BORDER_COLOR, banner_rect, 2, border_radius=20)
-        
-        # Dibujar el texto en el centro del banner
-        screen.blit(text_surface, text_rect)
-        
-        # Dibujar las opciones
-        options_text = self.small_font.render(self.options, True, WHITE)
-        options_rect = options_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 30))
-        screen.blit(options_text, options_rect)
-        
-        pygame.display.flip()
-
-class Game:
-    def __init__(self):
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        pygame.display.set_caption("Pac-Man")
-        self.clock = pygame.time.Clock()
-        self.maze = Maze()
-        self.header = Header(self.maze.total_pills)
-        self.eat_sound = pygame.mixer.Sound("chomp.wav")
-        self.pacman = Pacman(self.maze, self.eat_sound)
-        self.ghost = Ghost(self.maze, self.pacman.pos)
-        self.game_won = False
-        self.banner = None
-
-    def reset(self):
-        self.maze = Maze()
-        self.header = Header(self.maze.total_pills)
-        self.pacman = Pacman(self.maze, self.eat_sound)
-        self.ghost = Ghost(self.maze, self.pacman.pos)
-        self.game_won = False
-        self.banner = None
-
-    def run(self):
-        running = True
-        while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_LEFT:
-                        self.pacman.set_direction([-1, 0])
-                    elif event.key == pygame.K_RIGHT:
-                        self.pacman.set_direction([1, 0])
-                    elif event.key == pygame.K_UP:
-                        self.pacman.set_direction([0, -1])
-                    elif event.key == pygame.K_DOWN:
-                        self.pacman.set_direction([0, 1])
-                    elif self.game_won and event.key == pygame.K_n:
-                        self.reset()
-                    elif self.game_won and event.key == pygame.K_s:
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if banner and banner.with_options:
+                    if event.key == pygame.K_n:
+                        main()  # Reiniciar el juego
+                    elif event.key == pygame.K_s:
                         running = False
+                else:
+                    if event.key == pygame.K_UP:
+                        pacman.set_direction([0, -1])
+                    elif event.key == pygame.K_DOWN:
+                        pacman.set_direction([0, 1])
+                    elif event.key == pygame.K_LEFT:
+                        pacman.set_direction([-1, 0])
+                    elif event.key == pygame.K_RIGHT:
+                        pacman.set_direction([1, 0])
 
-            if not self.game_won:
-                # Mover Pac-Man
-                if self.pacman.move():
-                    self.header.eat_pill()
+        if not banner:
+            pacman.move()
 
-                # Verificar si se han comido todas las píldoras
-                if self.header.pills_left == 0:
-                    self.game_won = True
-                    self.banner = OptionBanner("¡Has ganado!", "N: Nueva partida | S: Salir")
-                    self.banner.start()
+            # Añadir nuevo fantasma si Pac-Man ha comido 10 píldoras
+            if pacman.pills_eaten % 10 == 0 and pacman.pills_eaten > 0 and len(ghosts) < (pacman.pills_eaten // 10):
+                ghosts.append(Ghost(maze, pacman.pos))
 
-                # Mover el fantasma
-                self.ghost.move()
+            if header.pills_left == 0:
+                banner = Banner("¡Has ganado!", with_options=True)
 
-            # Limpiar la pantalla
-            self.screen.fill(BACKGROUND_COLOR)
+        screen.fill(BLACK)
+        maze.draw(screen, TILE_SIZE, PADDING, HEADER_HEIGHT)
+        pacman.draw(screen)
+        for ghost in ghosts:
+            ghost.move()
+            ghost.draw(screen)
+        header.draw(screen)
+        if banner:
+            banner.draw(screen)
+        pygame.display.flip()
+        clock.tick(60)
 
-            # Dibujar el encabezado
-            self.header.draw(self.screen)
-
-            # Dibujar el laberinto
-            self.maze.draw(self.screen, TILE_SIZE, PADDING, HEADER_HEIGHT)
-
-            # Dibujar Pac-Man
-            self.pacman.draw(self.screen)
-
-            # Dibujar el fantasma
-            self.ghost.draw(self.screen)
-
-            # Mostrar banner si el juego ha sido ganado
-            if self.game_won:
-                self.banner.show(self.screen)
-                if self.banner.has_finished() and not self.banner.duration:
-                    self.banner = OptionBanner("¡Has ganado!", "N: Nueva partida | S: Salir")
-                    self.banner.start()
-
-            # Actualizar la pantalla
-            pygame.display.flip()
-
-            # Controlar la velocidad del bucle
-            self.clock.tick(FPS)
-
-        pygame.quit()
+    pygame.quit()
 
 if __name__ == "__main__":
-    game = Game()
-    game.run()
+    main()

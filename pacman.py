@@ -1,121 +1,166 @@
-import pygame
-import random
+from globals import *
+from maze_definition import Maze  # Importar la clase Maze
 
-# Inicializar Pygame
-pygame.init()
+class Header:
+    def __init__(self, total_pills):
+        self.font = pygame.font.SysFont(None, 36)
+        self.pills_left = total_pills
+        self.message = ""
 
-# Configuración de la pantalla
-WIDTH, HEIGHT = 800, 600
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Pac-Man")
+    def eat_pill(self):
+        self.pills_left -= 1
 
-# Colores
-BLACK = (0, 0, 0)
-YELLOW = (255, 255, 0)
-RED = (255, 0, 0)
-BLUE = (0, 0, 255)
-WHITE = (255, 255, 255)
+    def set_message(self, message):
+        self.message = message
 
-# Dimensiones del laberinto
-TILE_SIZE = 40
-ROWS, COLS = HEIGHT // TILE_SIZE, WIDTH // TILE_SIZE
+    def draw(self, screen):
+        screen.fill(BLACK, (0, 0, SCREEN_WIDTH, HEADER_HEIGHT))
+        pills_text = self.font.render(f"Pills Left: {self.pills_left}", True, WHITE)
+        screen.blit(pills_text, (10, 10))
+        message_text = self.font.render(self.message, True, WHITE)
+        screen.blit(message_text, (SCREEN_WIDTH // 2, 10))
 
-# Crear laberinto
-maze = [
-    "####################",
-    "#........#.........#",
-    "#.####.###.####.###.#",
-    "#.####.###.####.###.#",
-    "#...................#",
-    "#.####.#####.#####.#",
-    "#.....#.....#.....#.#",
-    "#####.#.###.#.###.#.#",
-    "#.....#.#.#.#.#.#.#.#",
-    "###.###.#.#.#.#.#.#.#",
-    "#.................#.#",
-    "#.###.###.###.###.#.#",
-    "#.###.###.###.###.#.#",
-    "#.....#.....#.....#.#",
-    "####################",
-]
-
-# Posición inicial de Pac-Man
-pacman_pos = [1 * TILE_SIZE, 1 * TILE_SIZE]
-pacman_speed = 2
-pacman_dir = [0, 0]
-
-# Clase para manejar los fantasmas
-class Ghost:
-    def __init__(self, pos):
-        self.pos = pos
-        self.speed = 2
+class Pacman:
+    def __init__(self, maze, eat_sound):
+        self.maze = maze
+        self.pos = self.get_random_position()
+        self.speed = 4
         self.dir = [0, 0]
+        self.next_dir = [0, 0]
+        self.eat_sound = eat_sound
+        self.image = pygame.image.load("pacman.png")
+        self.image = pygame.transform.scale(self.image, (TILE_SIZE, TILE_SIZE))
+        self.pills_eaten = 0  # Contador de píldoras comidas
+
+    def get_random_position(self):
+        col, row = self.maze.get_random_valid_position()
+        x = col * TILE_SIZE + PADDING
+        y = row * TILE_SIZE + HEADER_HEIGHT + PADDING
+        return [x, y]
+
+    def draw(self, screen):
+        rotated_image = self.get_rotated_image()
+        screen.blit(rotated_image, (self.pos[0], self.pos[1]))
+
+    def get_rotated_image(self):
+        if self.dir == [1, 0]:  # Derecha
+            return self.image
+        elif self.dir == [-1, 0]:  # Izquierda
+            return pygame.transform.flip(self.image, True, False)
+        elif self.dir == [0, -1]:  # Arriba
+            return pygame.transform.rotate(self.image, 90)
+        elif self.dir == [0, 1]:  # Abajo
+            return pygame.transform.rotate(self.image, -90)
+        return self.image
+
+    def can_move(self, new_pos):
+        # Verificar las cuatro esquinas del sprite de Pac-Man
+        corners = [
+            (new_pos[0], new_pos[1]),
+            (new_pos[0] + TILE_SIZE - 1, new_pos[1]),
+            (new_pos[0], new_pos[1] + TILE_SIZE - 1),
+            (new_pos[0] + TILE_SIZE - 1, new_pos[1] + TILE_SIZE - 1)
+        ]
+        for (x, y) in corners:
+            if x < PADDING or x >= SCREEN_WIDTH + PADDING or y < HEADER_HEIGHT + PADDING or y >= SCREEN_HEIGHT + HEADER_HEIGHT + PADDING or self.maze.is_wall((x - PADDING) // TILE_SIZE, (y - HEADER_HEIGHT - PADDING) // TILE_SIZE):
+                return False
+        return True
 
     def move(self):
-        directions = [[0, -1], [0, 1], [-1, 0], [1, 0]]
-        self.dir = random.choice(directions)
+        # Intentar cambiar la dirección si es posible
+        new_pos = [self.pos[0] + self.next_dir[0] * self.speed, self.pos[1] + self.next_dir[1] * self.speed]
+        if self.can_move(new_pos):
+            self.dir = self.next_dir
+
+        # Mover en la dirección actual
         new_pos = [self.pos[0] + self.dir[0] * self.speed, self.pos[1] + self.dir[1] * self.speed]
-        if maze[new_pos[1] // TILE_SIZE][new_pos[0] // TILE_SIZE] != '#':
+        if self.can_move(new_pos):
+            self.pos = new_pos
+            # Comer la píldora si está en una
+            if self.maze.eat_pill((self.pos[0] - PADDING) // TILE_SIZE, (self.pos[1] - HEADER_HEIGHT - PADDING) // TILE_SIZE):
+                self.eat_sound.play()
+                self.pills_eaten += 1
+                return True
+        else:
+            # Alinear a la cuadrícula si se choca con una pared
+            if self.dir == [0, -1] or self.dir == [0, 1]:  # Movimiento vertical
+                self.pos[0] = ((self.pos[0] - PADDING) // TILE_SIZE) * TILE_SIZE + PADDING
+            else:  # Movimiento horizontal
+                self.pos[1] = ((self.pos[1] - HEADER_HEIGHT - PADDING) // TILE_SIZE) * TILE_SIZE + HEADER_HEIGHT + PADDING
+        return False
+
+    def set_direction(self, direction):
+        self.next_dir = direction
+
+class Ghost:
+    def __init__(self, maze, pacman_pos):
+        self.maze = maze
+        self.pos = self.get_random_position(pacman_pos)
+        self.speed = 2
+        self.dir = random.choice([[1, 0], [-1, 0], [0, 1], [0, -1]])
+        self.image = pygame.image.load("ghost.png")
+        self.image = pygame.transform.scale(self.image, (TILE_SIZE, TILE_SIZE))
+
+    def get_random_position(self, pacman_pos):
+        while True:
+            col, row = self.maze.get_random_valid_position()
+            x = col * TILE_SIZE + PADDING
+            y = row * TILE_SIZE + HEADER_HEIGHT + PADDING
+            if (x, y) != pacman_pos:
+                return [x, y]
+
+    def move(self):
+        new_pos = [self.pos[0] + self.dir[0] * self.speed, self.pos[1] + self.dir[1] * self.speed]
+        if self.maze.is_wall((new_pos[0] - PADDING) // TILE_SIZE, (new_pos[1] - HEADER_HEIGHT - PADDING) // TILE_SIZE):
+            self.dir = random.choice([[1, 0], [-1, 0], [0, 1], [0, -1]])
+        else:
             self.pos = new_pos
 
     def draw(self, screen):
-        pygame.draw.rect(screen, RED, (*self.pos, TILE_SIZE, TILE_SIZE))
+        screen.blit(self.image, (self.pos[0], self.pos[1]))
 
-# Crear fantasmas
-ghosts = [Ghost([10 * TILE_SIZE, 10 * TILE_SIZE])]
+def main():
+    pygame.init()
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    clock = pygame.time.Clock()
+    maze = Maze()
+    header = Header(maze.total_pills)
+    eat_sound = pygame.mixer.Sound("chomp.wav")
+    pacman = Pacman(maze, eat_sound)
+    ghosts = [Ghost(maze, pacman.pos)]  # Lista de fantasmas inicial
 
-# Función para dibujar el laberinto
-def draw_maze(screen):
-    for row in range(ROWS):
-        for col in range(COLS):
-            if maze[row][col] == '#':
-                pygame.draw.rect(screen, BLUE, (col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE))
-            elif maze[row][col] == '.':
-                pygame.draw.circle(screen, WHITE, (col * TILE_SIZE + TILE_SIZE // 2, row * TILE_SIZE + TILE_SIZE // 2), 5)
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP:
+                    pacman.set_direction([0, -1])
+                elif event.key == pygame.K_DOWN:
+                    pacman.set_direction([0, 1])
+                elif event.key == pygame.K_LEFT:
+                    pacman.set_direction([-1, 0])
+                elif event.key == pygame.K_RIGHT:
+                    pacman.set_direction([1, 0])
 
-# Bucle principal
-running = True
-while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_LEFT:
-                pacman_dir = [-1, 0]
-            elif event.key == pygame.K_RIGHT:
-                pacman_dir = [1, 0]
-            elif event.key == pygame.K_UP:
-                pacman_dir = [0, -1]
-            elif event.key == pygame.K_DOWN:
-                pacman_dir = [0, 1]
+        pacman.move()
 
-    # Mover Pac-Man
-    new_pacman_pos = [pacman_pos[0] + pacman_dir[0] * pacman_speed, pacman_pos[1] + pacman_dir[1] * pacman_speed]
-    if maze[new_pacman_pos[1] // TILE_SIZE][new_pacman_pos[0] // TILE_SIZE] != '#':
-        pacman_pos = new_pacman_pos
+        # Añadir nuevo fantasma si Pac-Man ha comido 10 píldoras
+        if pacman.pills_eaten % 10 == 0 and pacman.pills_eaten > 0 and len(ghosts) < (pacman.pills_eaten // 10):
+            ghosts.append(Ghost(maze, pacman.pos))
 
-    # Mover fantasmas
-    for ghost in ghosts:
-        ghost.move()
+        screen.fill(BLACK)
+        maze.draw(screen, TILE_SIZE, PADDING, HEADER_HEIGHT)
+        pacman.draw(screen)
+        for ghost in ghosts:
+            ghost.move()
+            ghost.draw(screen)
+        header.draw(screen)
+        pygame.display.flip()
+        clock.tick(60)
 
-    # Limpiar la pantalla
-    screen.fill(BLACK)
+    pygame.quit()
 
-    # Dibujar el laberinto
-    draw_maze(screen)
-
-    # Dibujar Pac-Man
-    pygame.draw.circle(screen, YELLOW, (pacman_pos[0] + TILE_SIZE // 2, pacman_pos[1] + TILE_SIZE // 2), TILE_SIZE // 2)
-
-    # Dibujar fantasmas
-    for ghost in ghosts:
-        ghost.draw(screen)
-
-    # Actualizar la pantalla
-    pygame.display.flip()
-
-    # Controlar la velocidad del bucle
-    pygame.time.delay(30)
-
-# Salir de Pygame
-pygame.quit()
+if __name__ == "__main__":
+    main()

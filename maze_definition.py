@@ -34,10 +34,12 @@ class Maze:
                         pygame.draw.circle(screen, RED, (x + tile_size // 2, y + tile_size // 2), 5)
 
     def is_wall(self, x, y):
-        return self.maze[y][x] == '#'
+        if 0 <= y < self.rows and 0 <= x < self.cols:
+            return self.maze[y][x] == '#'
+        return False
 
     def eat_pill(self, x, y):
-        if self.maze[y][x] == '.':
+        if 0 <= y < self.rows and 0 <= x < self.cols and self.maze[y][x] == '.':
             self.maze[y] = self.maze[y][:x] + ' ' + self.maze[y][x+1:]
             return True
         return False
