@@ -61,10 +61,26 @@ class Pacman:
         self.dir = [0, 0]
         self.next_dir = [0, 0]
         self.eat_sound = eat_sound
+        self.image = pygame.image.load("pacman.png")
+        self.image = pygame.transform.scale(self.image, (TILE_SIZE, TILE_SIZE))
+
 
 
     def draw(self, screen):
-        pygame.draw.circle(screen, YELLOW, (self.pos[0] + TILE_SIZE // 2, self.pos[1] + TILE_SIZE // 2), TILE_SIZE // 2)
+        rotated_image=self.get_rotated_image()
+        screen.blit(rotated_image, (self.pos[0], self.pos[1]))
+        
+    def get_rotated_image(self):
+        if self.dir == [1, 0]:  # Derecha
+            return self.image
+        elif self.dir == [-1, 0]:  # Izquierda
+            return pygame.transform.flip(self.image, True, False)
+        elif self.dir == [0, -1]:  # Arriba
+            return pygame.transform.rotate(self.image, 90)
+        elif self.dir == [0, 1]:  # Abajo
+            return pygame.transform.rotate(self.image, -90)
+        return self.image
+
 
     def can_move(self, new_pos):
         # Verificar las cuatro esquinas del sprite de Pac-Man
