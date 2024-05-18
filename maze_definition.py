@@ -1,4 +1,5 @@
 from globals import *
+import random
 
 class Maze:
     def __init__(self, rows=15, cols=20):
@@ -37,6 +38,7 @@ class Maze:
 
         # Convertir el laberinto a una lista de cadenas
         maze_str = [''.join(row) for row in maze]
+
         return maze_str
 
     def get_valid_positions(self):
