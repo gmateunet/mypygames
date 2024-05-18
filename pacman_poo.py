@@ -1,4 +1,5 @@
 import pygame
+import random
 
 # Inicializar Pygame
 pygame.init()
@@ -146,6 +147,40 @@ class Pacman:
     def set_direction(self, direction):
         self.next_dir = direction
 
+class Ghost:
+    def __init__(self, maze):
+        self.maze = maze
+        self.pos = [10 * TILE_SIZE + PADDING, 10 * TILE_SIZE + HEADER_HEIGHT + PADDING]
+        self.speed = 2
+        self.dir = random.choice([[1, 0], [-1, 0], [0, 1], [0, -1]])
+        self.image = pygame.image.load("ghost.png")
+        self.image = pygame.transform.scale(self.image, (TILE_SIZE, TILE_SIZE))
+
+    def draw(self, screen):
+        screen.blit(self.image, (self.pos[0], self.pos[1]))
+
+    def can_move(self, new_pos):
+        # Verificar las cuatro esquinas del sprite del fantasma
+        corners = [
+            (new_pos[0], new_pos[1]),
+            (new_pos[0] + TILE_SIZE - 1, new_pos[1]),
+            (new_pos[0], new_pos[1] + TILE_SIZE - 1),
+            (new_pos[0] + TILE_SIZE - 1, new_pos[1] + TILE_SIZE - 1)
+        ]
+        for (x, y) in corners:
+            if x < PADDING or x >= WIDTH + PADDING or y < HEADER_HEIGHT + PADDING or y >= HEIGHT + HEADER_HEIGHT + PADDING or self.maze.is_wall((x - PADDING) // TILE_SIZE, (y - HEADER_HEIGHT - PADDING) // TILE_SIZE):
+                return False
+        return True
+
+    def move(self):
+        # Intentar moverse en la dirección actual
+        new_pos = [self.pos[0] + self.dir[0] * self.speed, self.pos[1] + self.dir[1] * self.speed]
+        if self.can_move(new_pos):
+            self.pos = new_pos
+        else:
+            # Cambiar de dirección aleatoriamente si no puede moverse
+            self.dir = random.choice([[1, 0], [-1, 0], [0, 1], [0, -1]])
+
 class Game:
     def __init__(self):
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -155,6 +190,7 @@ class Game:
         self.header = Header(self.maze.total_pills)
         self.eat_sound = pygame.mixer.Sound("chomp.wav")
         self.pacman = Pacman(self.maze, self.eat_sound)
+        self.ghost = Ghost(self.maze)
 
     def run(self):
         running = True
@@ -176,6 +212,9 @@ class Game:
             if self.pacman.move():
                 self.header.eat_pill()
 
+            # Mover el fantasma
+            self.ghost.move()
+
             # Limpiar la pantalla
             self.screen.fill(BACKGROUND_COLOR)
 
@@ -187,6 +226,9 @@ class Game:
 
             # Dibujar Pac-Man
             self.pacman.draw(self.screen)
+
+            # Dibujar el fantasma
+            self.ghost.draw(self.screen)
 
             # Actualizar la pantalla
             pygame.display.flip()
