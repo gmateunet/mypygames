@@ -1,5 +1,5 @@
 import pygame
-
+#https://bigsoundbank.com/
 # Inicializar Pygame
 pygame.init()
 
@@ -50,14 +50,18 @@ class Maze:
     def eat_pill(self, x, y):
         if self.maze[y][x] == '.':
             self.maze[y] = self.maze[y][:x] + ' ' + self.maze[y][x+1:]
+            return True
+        return False
 
 class Pacman:
-    def __init__(self, maze):
+    def __init__(self, maze,eat_sound):
         self.maze = maze
         self.pos = [1 * TILE_SIZE, 1 * TILE_SIZE]
         self.speed = 4
         self.dir = [0, 0]
         self.next_dir = [0, 0]
+        self.eat_sound = eat_sound
+
 
     def draw(self, screen):
         pygame.draw.circle(screen, YELLOW, (self.pos[0] + TILE_SIZE // 2, self.pos[1] + TILE_SIZE // 2), TILE_SIZE // 2)
@@ -86,7 +90,8 @@ class Pacman:
         if self.can_move(new_pos):
             self.pos = new_pos
             # Comer la píldora si está en una
-            self.maze.eat_pill(self.pos[0] // TILE_SIZE, self.pos[1] // TILE_SIZE)
+            if self.maze.eat_pill(self.pos[0] // TILE_SIZE, self.pos[1] // TILE_SIZE):
+                self.eat_sound.play()
         else:
             # Alinear a la cuadrícula si se choca con una pared
             self.pos[0] = (self.pos[0] // TILE_SIZE) * TILE_SIZE
@@ -101,7 +106,9 @@ class Game:
         pygame.display.set_caption("Pac-Man")
         self.clock = pygame.time.Clock()
         self.maze = Maze()
-        self.pacman = Pacman(self.maze)
+        self.eat_sound = pygame.mixer.Sound("chomp.wav")
+        self.pacman = Pacman(self.maze,self.eat_sound)
+
 
     def run(self):
         running = True
