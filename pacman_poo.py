@@ -1,10 +1,13 @@
 import pygame
-#https://bigsoundbank.com/
+
 # Inicializar Pygame
 pygame.init()
 
 # Configuración de la pantalla
-WIDTH, HEIGHT = 800, 600
+SCREEN_WIDTH, SCREEN_HEIGHT = 900, 750  # Dimensiones totales de la pantalla
+HEADER_HEIGHT = 50  # Altura del encabezado
+PADDING = 50  # Espacio alrededor del área de juego
+WIDTH, HEIGHT = SCREEN_WIDTH - 2 * PADDING, SCREEN_HEIGHT - 2 * PADDING - HEADER_HEIGHT  # Dimensiones del área de juego
 TILE_SIZE = 40  # Tamaño de cada celda del laberinto
 FPS = 60  # Fotogramas por segundo
 
@@ -13,6 +16,27 @@ BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 BLUE = (0, 0, 255)
 YELLOW = (255, 255, 0)
+RED = (255, 0, 0)
+BACKGROUND_COLOR = (0, 255, 0)  # Color de fondo verde
+
+class Header:
+    def __init__(self, total_pills):
+        self.font = pygame.font.SysFont(None, 36)
+        self.pills_left = total_pills
+        self.message = ""
+
+    def eat_pill(self):
+        self.pills_left -= 1
+
+    def set_message(self, message):
+        self.message = message
+
+    def draw(self, screen):
+        screen.fill(BLACK, (0, 0, SCREEN_WIDTH, HEADER_HEIGHT))
+        pills_text = self.font.render(f"Pills Left: {self.pills_left}", True, WHITE)
+        screen.blit(pills_text, (10, 10))
+        message_text = self.font.render(self.message, True, WHITE)
+        screen.blit(message_text, (SCREEN_WIDTH // 2, 10))
 
 class Maze:
     def __init__(self):
@@ -31,22 +55,27 @@ class Maze:
             "#.###.###.###.###.#.",
             "#.###.###.###.###.#.",
             "#.....#.....#.....#.",
-            "####################",
+            "#.###########.#####.",
         ]
         self.rows = len(self.maze)
         self.cols = len(self.maze[0])
+        self.total_pills = sum(row.count('.') for row in self.maze)
 
     def draw(self, screen):
         for row in range(self.rows):
             for col in range(self.cols):
+                x = col * TILE_SIZE + PADDING
+                y = row * TILE_SIZE + HEADER_HEIGHT + PADDING
                 if self.maze[row][col] == '#':
-                    pygame.draw.rect(screen, BLUE, (col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE))
-                elif self.maze[row][col] == '.':
-                    pygame.draw.circle(screen, WHITE, (col * TILE_SIZE + TILE_SIZE // 2, row * TILE_SIZE + TILE_SIZE // 2), 5)
+                    pygame.draw.rect(screen, BLUE, (x, y, TILE_SIZE, TILE_SIZE))
+                else:
+                    pygame.draw.rect(screen, WHITE, (x, y, TILE_SIZE, TILE_SIZE))
+                    if self.maze[row][col] == '.':
+                        pygame.draw.circle(screen, RED, (x + TILE_SIZE // 2, y + TILE_SIZE // 2), 5)
 
     def is_wall(self, x, y):
         return self.maze[y][x] == '#'
-    
+
     def eat_pill(self, x, y):
         if self.maze[y][x] == '.':
             self.maze[y] = self.maze[y][:x] + ' ' + self.maze[y][x+1:]
@@ -54,9 +83,9 @@ class Maze:
         return False
 
 class Pacman:
-    def __init__(self, maze,eat_sound):
+    def __init__(self, maze, eat_sound):
         self.maze = maze
-        self.pos = [1 * TILE_SIZE, 1 * TILE_SIZE]
+        self.pos = [1 * TILE_SIZE + PADDING, 1 * TILE_SIZE + HEADER_HEIGHT + PADDING]
         self.speed = 4
         self.dir = [0, 0]
         self.next_dir = [0, 0]
@@ -64,12 +93,10 @@ class Pacman:
         self.image = pygame.image.load("pacman.png")
         self.image = pygame.transform.scale(self.image, (TILE_SIZE, TILE_SIZE))
 
-
-
     def draw(self, screen):
-        rotated_image=self.get_rotated_image()
+        rotated_image = self.get_rotated_image()
         screen.blit(rotated_image, (self.pos[0], self.pos[1]))
-        
+
     def get_rotated_image(self):
         if self.dir == [1, 0]:  # Derecha
             return self.image
@@ -81,7 +108,6 @@ class Pacman:
             return pygame.transform.rotate(self.image, -90)
         return self.image
 
-
     def can_move(self, new_pos):
         # Verificar las cuatro esquinas del sprite de Pac-Man
         corners = [
@@ -91,7 +117,7 @@ class Pacman:
             (new_pos[0] + TILE_SIZE - 1, new_pos[1] + TILE_SIZE - 1)
         ]
         for (x, y) in corners:
-            if x < 0 or x >= WIDTH or y < 0 or y >= HEIGHT or self.maze.is_wall(x // TILE_SIZE, y // TILE_SIZE):
+            if x < PADDING or x >= WIDTH + PADDING or y < HEADER_HEIGHT + PADDING or y >= HEIGHT + HEADER_HEIGHT + PADDING or self.maze.is_wall((x - PADDING) // TILE_SIZE, (y - HEADER_HEIGHT - PADDING) // TILE_SIZE):
                 return False
         return True
 
@@ -106,25 +132,29 @@ class Pacman:
         if self.can_move(new_pos):
             self.pos = new_pos
             # Comer la píldora si está en una
-            if self.maze.eat_pill(self.pos[0] // TILE_SIZE, self.pos[1] // TILE_SIZE):
+            if self.maze.eat_pill((self.pos[0] - PADDING) // TILE_SIZE, (self.pos[1] - HEADER_HEIGHT - PADDING) // TILE_SIZE):
                 self.eat_sound.play()
+                return True
         else:
             # Alinear a la cuadrícula si se choca con una pared
-            self.pos[0] = (self.pos[0] // TILE_SIZE) * TILE_SIZE
-            self.pos[1] = (self.pos[1] // TILE_SIZE) * TILE_SIZE
+            if self.dir == [0, -1] or self.dir == [0, 1]:  # Movimiento vertical
+                self.pos[0] = ((self.pos[0] - PADDING) // TILE_SIZE) * TILE_SIZE + PADDING
+            else:  # Movimiento horizontal
+                self.pos[1] = ((self.pos[1] - HEADER_HEIGHT - PADDING) // TILE_SIZE) * TILE_SIZE + HEADER_HEIGHT + PADDING
+        return False
 
     def set_direction(self, direction):
         self.next_dir = direction
 
 class Game:
     def __init__(self):
-        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("Pac-Man")
         self.clock = pygame.time.Clock()
         self.maze = Maze()
+        self.header = Header(self.maze.total_pills)
         self.eat_sound = pygame.mixer.Sound("chomp.wav")
-        self.pacman = Pacman(self.maze,self.eat_sound)
-
+        self.pacman = Pacman(self.maze, self.eat_sound)
 
     def run(self):
         running = True
@@ -143,10 +173,14 @@ class Game:
                         self.pacman.set_direction([0, 1])
 
             # Mover Pac-Man
-            self.pacman.move()
+            if self.pacman.move():
+                self.header.eat_pill()
 
             # Limpiar la pantalla
-            self.screen.fill(BLACK)
+            self.screen.fill(BACKGROUND_COLOR)
+
+            # Dibujar el encabezado
+            self.header.draw(self.screen)
 
             # Dibujar el laberinto
             self.maze.draw(self.screen)
