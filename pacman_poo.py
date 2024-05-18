@@ -2,13 +2,17 @@ from globals import *
 from maze_definition import Maze  # Importar la clase Maze
 
 class Header:
-    def __init__(self, total_pills):
+    def __init__(self, total_pills, total_lives):
         self.font = pygame.font.SysFont(None, 36)
         self.pills_left = total_pills
+        self.lives_left = total_lives
         self.message = ""
 
     def eat_pill(self):
         self.pills_left -= 1
+
+    def lose_life(self):
+        self.lives_left -= 1
 
     def set_message(self, message):
         self.message = message
@@ -17,6 +21,8 @@ class Header:
         screen.fill(BLACK, (0, 0, SCREEN_WIDTH, HEADER_HEIGHT))
         pills_text = self.font.render(f"Pills Left: {self.pills_left}", True, WHITE)
         screen.blit(pills_text, (10, 10))
+        lives_text = self.font.render(f"Lives Left: {self.lives_left}", True, WHITE)
+        screen.blit(lives_text, (SCREEN_WIDTH - 150, 10))
         message_text = self.font.render(self.message, True, WHITE)
         screen.blit(message_text, (SCREEN_WIDTH // 2, 10))
 
@@ -54,6 +60,7 @@ class Pacman:
         self.image = pygame.image.load("pacman.png")
         self.image = pygame.transform.scale(self.image, (TILE_SIZE, TILE_SIZE))
         self.pills_eaten = 0  # Contador de píldoras comidas
+        self.lives = 3  # Número de vidas
 
     def get_random_position(self):
         col, row = self.maze.get_random_valid_position()
@@ -118,6 +125,11 @@ class Pacman:
     def set_direction(self, direction):
         self.next_dir = direction
 
+    def reset_position(self):
+        self.pos = self.get_random_position()
+        self.dir = [0, 0]
+        self.next_dir = [0, 0]
+
 class Ghost:
     def __init__(self, maze, pacman_pos):
         self.maze = maze
@@ -160,15 +172,19 @@ class Ghost:
     def draw(self, screen):
         screen.blit(self.image, (self.pos[0], self.pos[1]))
 
+def new_game():
+    maze = Maze()
+    header = Header(maze.total_pills, 3)  # Inicializar con 3 vidas
+    eat_sound = pygame.mixer.Sound("chomp.wav")
+    pacman = Pacman(maze, header, eat_sound)
+    ghosts = [Ghost(maze, pacman.pos)]  # Lista de fantasmas inicial
+    return maze, header, pacman, ghosts
+
 def main():
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     clock = pygame.time.Clock()
-    maze = Maze()
-    header = Header(maze.total_pills)
-    eat_sound = pygame.mixer.Sound("chomp.wav")
-    pacman = Pacman(maze, header, eat_sound)
-    ghosts = [Ghost(maze, pacman.pos)]  # Lista de fantasmas inicial
+    maze, header, pacman, ghosts = new_game()
     banner = None
 
     running = True
@@ -179,7 +195,8 @@ def main():
             elif event.type == pygame.KEYDOWN:
                 if banner and banner.with_options:
                     if event.key == pygame.K_n:
-                        main()  # Reiniciar el juego
+                        maze, header, pacman, ghosts = new_game()  # Reiniciar el juego
+                        banner = None
                     elif event.key == pygame.K_s:
                         running = False
                 else:
@@ -198,6 +215,17 @@ def main():
             # Añadir nuevo fantasma si Pac-Man ha comido 10 píldoras
             if pacman.pills_eaten % 10 == 0 and pacman.pills_eaten > 0 and len(ghosts) < (pacman.pills_eaten // 10):
                 ghosts.append(Ghost(maze, pacman.pos))
+
+            # Verificar colisión con fantasmas
+            for ghost in ghosts:
+                if pygame.Rect(pacman.pos[0], pacman.pos[1], TILE_SIZE, TILE_SIZE).colliderect(pygame.Rect(ghost.pos[0], ghost.pos[1], TILE_SIZE, TILE_SIZE)):
+                    pacman.lives -= 1
+                    header.lose_life()
+                    if pacman.lives <= 0:
+                        banner = Banner("Game Over", with_options=True)
+                    else:
+                        pacman.reset_position()
+                    break
 
             if header.pills_left == 0:
                 banner = Banner("¡Has ganado!", with_options=True)
